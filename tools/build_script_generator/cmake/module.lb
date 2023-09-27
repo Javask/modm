@@ -16,6 +16,9 @@ with open(localpath("../common.py")) as common:
     exec(common.read())
 
 import re
+import filecmp
+import tempfile
+import shutil
 from os.path import join, isdir
 
 class PerFileAttr:
@@ -105,7 +108,14 @@ def build(env):
     env.collect("flag_format", flag_format)
 
 
+def copy_if_different(localdir, tmpdir, filename):
+    localfile = os.path.join(localdir,filename)
+    tmpfile = os.path.join(tmpdir,filename)
+    if not os.path.isfile(localfile) or not filecmp.cmp(localfile,tmpfile):
+        shutil.copy(tmpfile,localfile)
+
 def post_build(env):
+    tmppathbase = tempfile.mkdtemp()
     repositories = [p for p in env.buildlog.repositories if isdir(env.real_outpath(p, basepath="."))]
     repositories.sort(key=lambda name: "0" if name == "modm" else name)
 
@@ -203,17 +213,32 @@ def post_build(env):
             "per_file_attr": file_attrs,
         })
 
-        env.outbasepath = repo
+        tmppath = os.path.join(tmppathbase, repo)
+        env.outbasepath = tmppath
         env.template("resources/CMakeLists.txt.in", "CMakeLists.txt",
                      filters={"relocate": lambda p: env.relative_outpath(p, repo)})
         env.template("resources/ModmConfiguration.cmake.in", "cmake/ModmConfiguration.cmake",
                      filters={"flags_format": flags_format})
+        env.outbasepath = repo
+        
+        def copy_if_different(localdir, tmpdir, filename):
+            localfile = os.path.join(localdir,filename)
+            tmpfile = os.path.join(tmpdir,filename)
+            if not os.path.isfile(localfile) or not filecmp.cmp(localfile,tmpfile,shallow=False):
+                shutil.copy(tmpfile,localfile)
+        copy_if_different(repo,tmppath,"CMakeLists.txt")
+        copy_if_different(repo,tmppath,"cmake/ModmConfiguration.cmake")
+        
 
     # these are the ONLY files that are allowed to NOT be namespaced with modm!
     env.outbasepath = "."
     if env["include_cmakelists"]:
+        env.outbasepath = tmppathbase
         env.template("resources/ci_CMakeLists.txt.in", "CMakeLists.txt")
+        env.outbasepath = "."
+        copy_if_different(".",tmppathbase,"CMakeLists.txt")
 
+    shutil.rmtree(tmppathbase, ignore_errors=False, onerror=None)
 
 # ============================ Option Descriptions ============================
 descr_include_cmakelists = """# Generate a CMakeLists.txt
