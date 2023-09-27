@@ -50,7 +50,7 @@ class PerFileAttr:
 
     def to_string(self, repo):
         s = "set_source_files_properties(\n"
-        for file in self.files:
+        for file in sorted(self.files):
             s += "  " + file[len(repo) + 1:] + "\n"      # Filter out base directory
         s += "    TARGET_DIRECTORY modm\n  PROPERTIES\n"
         groups = []
