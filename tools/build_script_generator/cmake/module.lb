@@ -79,6 +79,10 @@ def prepare(module, options):
         BooleanOption(name="include_cmakelists", default=False,
                       description=descr_include_cmakelists))
 
+    module.add_option(
+        BooleanOption(name="rerun_lbuild", default=False,
+                      description="Add \"lbuild build\" hook to \"all\" target"))
+
     module.add_collector(
         CallableCollector(name="flag_format",
                           description="Formatting compile flags for CMake"))
@@ -112,6 +116,7 @@ def post_build(env):
         "generated_paths": repositories,
         "project_name": env[":build:project.name"],
         "project_path": os.getcwd(),
+        "rerun_lbuild": env["rerun_lbuild"],
     })
     if subs["platform"] == "avr":
         subs.update(env.query("::avrdude_options"))

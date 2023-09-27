@@ -85,3 +85,7 @@ target_link_libraries({{ repo }}
     modm_warnings
 %% endif
   )
+
+%% if rerun_lbuild
+add_dependencies({{ repo }} lbuild-build)
+%% endif
