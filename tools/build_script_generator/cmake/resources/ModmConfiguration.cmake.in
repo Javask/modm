@@ -302,5 +302,11 @@ function(modm_targets_create project_name)
     USES_TERMINAL
     COMMAND cmake -E env PYTHONPATH=modm ${Python3_EXECUTABLE} -m modm_tools.rtt --channel ${MODM_RTT_CHANNEL} jlink -device {{ jlink_partname }}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+
+
+  add_custom_target(lbuild-build)
+  add_custom_command(TARGET lbuild-build
+    COMMAND lbuild build
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 endfunction()
 
