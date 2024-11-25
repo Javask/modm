@@ -143,7 +143,13 @@ modm::platform::SocketCan::getMessage(can::Message& message)
 		}
 		message.setIdentifier(frame.can_id & CAN_ERR_MASK);
 		message.setLength(frame.len);
+		message.flags = {};
 		message.setExtended(frame.can_id & CAN_EFF_FLAG);
+		if (nbytes == sizeof(struct canfd_frame))
+		{
+			message.setFlexibleData(true);
+			message.flags.brs = (frame.flags & CANFD_BRS);
+		}
 		message.setRemoteTransmitRequest(frame.can_id & CAN_RTR_FLAG);
 		for (uint8_t ii = 0; ii < frame.len; ++ii) {
 			message.data[ii] = frame.data[ii];
@@ -156,9 +162,15 @@ modm::platform::SocketCan::getMessage(can::Message& message)
 bool
 modm::platform::SocketCan::sendMessage(const can::Message& message)
 {
+	// Non fd frames do not support message lengths > 8
+	if (!message.isFlexibleData() && message.getLength() > 8) { return false; }
+
 	struct canfd_frame frame;
 
 	frame.flags = 0;
+	// FDF Frame flag is ignored so we dont need to set it
+	if (message.isBitRateSwitching()) { frame.flags |= CANFD_BRS; }
+
 	frame.can_id = message.identifier;
 	if (message.isExtended()) {
 		frame.can_id |= CAN_EFF_FLAG;
@@ -173,10 +185,10 @@ modm::platform::SocketCan::sendMessage(const can::Message& message)
 		frame.data[ii] = message.data[ii];
 	}
 
-	// Send can_frame when length < 8, since other applications may not accept
-	// canfd_frame. Both structs intentionally share the same layout
-	// for this purpose
-	int size = message.getLength() > 8 ? sizeof(canfd_frame) : sizeof(can_frame);
+	// Send can_frame when not explicitly requesting FD, since other applications
+	// may not accept canfd_frame. Both structs intentionally share the same
+	// layout for this purpose
+	const int size = message.isFlexibleData() ? sizeof(canfd_frame) : sizeof(can_frame);
 	int bytes_sent = write(skt, &frame, size);
 
 	return (bytes_sent > 0);
