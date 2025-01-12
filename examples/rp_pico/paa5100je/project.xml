@@ -1,0 +1,13 @@
+<library>
+  <extends>modm:rp-pico</extends>
+  <options>
+    <option name="modm:build:build.path">../../../build/rp_pico/paa5100je</option>
+  </options>
+  <modules>
+    <module>modm:debug</module>
+    <module>modm:build:scons</module>
+    <module>modm:platform:uart:0</module>
+    <module>modm:platform:spi:0</module>
+    <module>modm:driver:paa5100je</module>
+  </modules>
+</library>
