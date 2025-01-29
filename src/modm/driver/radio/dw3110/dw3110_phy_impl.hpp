@@ -987,6 +987,23 @@ modm::Dw3110Phy<SpiMaster, Cs>::checkTXFailed()
 }
 
 template<typename SpiMaster, typename Cs>
+modm::ResumableResult<uint16_t>
+modm::Dw3110Phy<SpiMaster, Cs>::getPeakCIRSampleIndex(bool use_sts_cir)
+{
+	RF_BEGIN();
+	if (!use_sts_cir)
+	{
+		RF_CALL(
+			readRegister<Dw3110::IP_DIAG_0, 2, 2>(std::span<uint8_t>(scratch).first<2>()));
+	} else
+	{
+		RF_CALL(
+			readRegister<Dw3110::STS_DIAG_0, 2, 2>(std::span<uint8_t>(scratch).first<2>()));
+	}
+	RF_END_RETURN(((uint16_t)(scratch[1] & 0x7F)) << 3 | ((uint16_t)(scratch[0] & 0xE0)) >> 5);
+}
+
+template<typename SpiMaster, typename Cs>
 modm::ResumableResult<void>
 modm::Dw3110Phy<SpiMaster, Cs>::enableAccumulatorMemory()
 {

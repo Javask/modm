@@ -355,6 +355,11 @@ public:
 	modm::ResumableResult<void>
 	reuseLastSTSIV();
 
+	/// Return the index inside the accumulator memory corresponding to the peak in the channel
+	/// impulse response estimation
+	modm::ResumableResult<uint16_t>
+	getPeakCIRSampleIndex(bool use_sts_cir = false);
+
 	/// Enable access to the raw CIR accumulator memory
 	modm::ResumableResult<void>
 	enableAccumulatorMemory();
@@ -417,7 +422,7 @@ protected:
 	modm::ResumableResult<void>
 	readRegister(std::span<uint8_t, Len> out);
 
-	/// Read a variable from a register bank 
+	/// Read a variable from a register bank
 	/// Has to be used for offsets > 127
 	template<Dw3110::RegisterBank Reg, size_t Len, size_t Discard>
 	modm::ResumableResult<void>
