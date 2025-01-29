@@ -355,6 +355,17 @@ public:
 	modm::ResumableResult<void>
 	reuseLastSTSIV();
 
+	/// Enable access to the raw CIR accumulator memory
+	modm::ResumableResult<void>
+	enableAccumulatorMemory();
+
+	/// Read a sample from the accumulator memory
+	/// Returns a complex value as [low byte real, middle byte real, high byte real, low byte
+	/// imaginary, middle byte imaginary, high byte imaginary]
+	/// Both the real and imaginary part only have 18 significant bits, the top 6 will always be 0
+	modm::ResumableResult<void>
+	readAccumulatorMemory(uint16_t index, std::span<uint8_t, 6> out);
+
 protected:
 	/// Transmit a given package using the current configuration and a specific command
 	/// @param payload Span to the desired payload
@@ -405,6 +416,12 @@ protected:
 	template<Dw3110::Register Reg, size_t Len, size_t Offset = 0>
 	modm::ResumableResult<void>
 	readRegister(std::span<uint8_t, Len> out);
+
+	/// Read a variable from a register bank 
+	/// Has to be used for offsets > 127
+	template<Dw3110::RegisterBank Reg, size_t Len, size_t Discard>
+	modm::ResumableResult<void>
+	readRegisterBankIndirect(uint16_t offset, std::span<uint8_t, Len> out);
 
 	/// Read a number of bytes from a register bank, useful for RX buffers and
 	/// other large read transfers

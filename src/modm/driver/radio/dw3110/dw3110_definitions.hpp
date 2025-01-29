@@ -439,11 +439,12 @@ struct Dw3110
 
 	// TODO DB_DIAG
 
-	// TODO INDIRECT_PTR_A
-
-	// TODO INDIRECT_PTR_B
-
-	// TODO IN_PTR_CFG
+	// IN_PTR_CFG
+	static constexpr Register FINT_STAT{.bank = IN_PTR_CFG, .offset = 0x0, .length = 1};
+	static constexpr Register PTR_ADDR_A{.bank = IN_PTR_CFG, .offset = 0x04, .length = 1};
+	static constexpr Register PTR_OFFSET_A{.bank = IN_PTR_CFG, .offset = 0x08, .length = 2};
+	static constexpr Register PTR_ADDR_B{.bank = IN_PTR_CFG, .offset = 0x0C, .length = 1};
+	static constexpr Register PTR_OFFSET_B{.bank = IN_PTR_CFG, .offset = 0x10, .length = 2};
 
 	static constexpr uint32_t SEQ_CTRL_AINIT2IDLE_mask = 0x00000010;
 };

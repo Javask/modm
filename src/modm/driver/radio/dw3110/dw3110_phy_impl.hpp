@@ -988,6 +988,26 @@ modm::Dw3110Phy<SpiMaster, Cs>::checkTXFailed()
 
 template<typename SpiMaster, typename Cs>
 modm::ResumableResult<void>
+modm::Dw3110Phy<SpiMaster, Cs>::enableAccumulatorMemory()
+{
+	RF_BEGIN();
+	constexpr static uint8_t or_mask[] = {0x20, 0x80};
+	constexpr static uint8_t and_mask[] = {0xFF, 0xFF};
+	RF_CALL(writeRegisterMasked<Dw3110::CLK_CTRL, 2>(or_mask, and_mask));
+	RF_END();
+}
+
+template<typename SpiMaster, typename Cs>
+modm::ResumableResult<void>
+modm::Dw3110Phy<SpiMaster, Cs>::readAccumulatorMemory(uint16_t index, std::span<uint8_t, 6> out)
+{
+	RF_BEGIN();
+	RF_CALL(readRegisterBankIndirect<Dw3110::ACC_MEM_BANK, 6, 1>(index * 6, out));
+	RF_END();
+}
+
+template<typename SpiMaster, typename Cs>
+modm::ResumableResult<void>
 modm::Dw3110Phy<SpiMaster, Cs>::setReferenceTime(uint32_t time)
 {
 	RF_BEGIN();
@@ -1134,6 +1154,7 @@ template<modm::Dw3110::Register Reg, size_t Len, size_t Offset>
 modm::ResumableResult<void>
 modm::Dw3110Phy<SpiMaster, Cs>::readRegister(std::span<uint8_t, Len> out)
 {
+	static_assert(Offset <= 128, "For offsets > 127 use read indirect!");
 	static_assert(Len <= Reg.length + Offset, "Size of read is too large for this register!");
 	RF_BEGIN();
 	RF_WAIT_UNTIL(this->acquireMaster());
@@ -1152,10 +1173,38 @@ modm::Dw3110Phy<SpiMaster, Cs>::readRegister(std::span<uint8_t, Len> out)
 }
 
 template<typename SpiMaster, typename Cs>
+template<modm::Dw3110::RegisterBank Reg, size_t Len, size_t Discard>
+modm::ResumableResult<void>
+modm::Dw3110Phy<SpiMaster, Cs>::readRegisterBankIndirect(uint16_t offset,
+														 std::span<uint8_t, Len> out)
+{
+	RF_BEGIN();
+	scratch[0] = (uint8_t)Reg.addr;
+	scratch[1] = (uint8_t)((offset >> 0) & 0xFF);
+	scratch[2] = (uint8_t)((offset >> 8) & 0xFF);
+
+	RF_CALL(writeRegister<Dw3110::PTR_ADDR_A, 1>(std::span<const uint8_t>(scratch).first<1>()));
+	RF_CALL(
+		writeRegister<Dw3110::PTR_OFFSET_A, 2>(std::span<const uint8_t>(scratch).subspan<1, 2>()));
+	RF_WAIT_UNTIL(this->acquireMaster());
+
+	tx_buffer[0] = Dw3110::INDIRECT_PTR_A.addr;
+
+	Cs::setOutput(false);
+	RF_CALL(SpiMaster::transfer(tx_buffer.data(), nullptr, 1));
+	if constexpr (Discard != 0) { RF_CALL(SpiMaster::transfer(nullptr, nullptr, Discard)); }
+	RF_CALL(SpiMaster::transfer(nullptr, out.data(), Len));
+	Cs::setOutput(true);
+	this->releaseMaster();
+	RF_END();
+}
+
+template<typename SpiMaster, typename Cs>
 template<modm::Dw3110::Register Reg, size_t Len, size_t Offset>
 modm::ResumableResult<void>
 modm::Dw3110Phy<SpiMaster, Cs>::writeRegister(std::span<const uint8_t, Len> val)
 {
+	static_assert(Offset <= 128, "For offsets > 127 use an indirect write!");
 	static_assert(Len + Offset <= Reg.length, "Size of write is too large for this register!");
 
 	RF_BEGIN();
