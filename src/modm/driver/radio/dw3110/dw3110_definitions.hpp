@@ -380,9 +380,13 @@ struct Dw3110
 	static constexpr Register OTP_SRDATA{.bank = OTP_IF, .offset = 0x14, .length = 4};
 
 	// TODO CIA 0-3
+	static constexpr Register IP_TS{.bank = CIA_0, .offset = 0x00, .length = 8};
+	static constexpr Register STS_TS{.bank = CIA_0, .offset = 0x08, .length = 8};
 	static constexpr Register CIA_DIAG_0{.bank = CIA_0, .offset = 0x20, .length = 4};
 	static constexpr Register IP_DIAG_0{.bank = CIA_0, .offset = 0x28, .length = 4};
+	static constexpr Register IP_DIAG_8{.bank = CIA_0, .offset = 0x48, .length = 4};
 	static constexpr Register STS_DIAG_0{.bank = CIA_0, .offset = 0x5C, .length = 4};
+	static constexpr Register STS_DIAG_8{.bank = CIA_1, .offset = 0x10, .length = 4};
 	static constexpr Register CIA_CONF{.bank = CIA_2, .offset = 0x0, .length = 4};
 	static constexpr Register STS_CONF_1{.bank = CIA_2, .offset = 0x16, .length = 4};
 

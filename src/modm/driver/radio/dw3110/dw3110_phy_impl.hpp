@@ -999,6 +999,24 @@ modm::Dw3110Phy<SpiMaster, Cs>::enableCIRDiagnostics()
 
 template<typename SpiMaster, typename Cs>
 modm::ResumableResult<uint16_t>
+modm::Dw3110Phy<SpiMaster, Cs>::getFirstPathCIRSampleIndex(bool use_sts_cir)
+{
+	RF_BEGIN();
+	if (!use_sts_cir)
+	{
+		RF_CALL(readRegister<Dw3110::IP_DIAG_8, 2>(std::span<uint8_t>(scratch).first<2>()));
+	} else
+	{
+		RF_CALL(readRegister<Dw3110::STS_DIAG_8, 2>(std::span<uint8_t>(scratch).first<2>()));
+	}
+	// Round to nearest full sample
+	*((uint16_t *)scratch.data()) += 0x20;
+	RF_END_RETURN(((((uint16_t)scratch[1]) << 8 | ((uint16_t)scratch[0])) >> 6) +
+				  (use_sts_cir ? 1024 : 0));
+}
+
+template<typename SpiMaster, typename Cs>
+modm::ResumableResult<uint16_t>
 modm::Dw3110Phy<SpiMaster, Cs>::getPeakCIRSampleIndex(bool use_sts_cir)
 {
 	RF_BEGIN();
@@ -1011,6 +1029,22 @@ modm::Dw3110Phy<SpiMaster, Cs>::getPeakCIRSampleIndex(bool use_sts_cir)
 	}
 	RF_END_RETURN((((uint16_t)(scratch[1] & 0x7F)) << 3 | ((uint16_t)(scratch[0] & 0xE0)) >> 5) +
 				  (use_sts_cir ? 1024 : 0));
+}
+
+template<typename SpiMaster, typename Cs>
+modm::ResumableResult<uint16_t>
+modm::Dw3110Phy<SpiMaster, Cs>::getEstimatedPoA(bool use_sts)
+{
+	RF_BEGIN();
+	if (use_sts)
+	{
+		RF_CALL(readRegister<Dw3110::STS_TS, 2, 5>(std::span<uint8_t>(scratch).first<2>()));
+	} else
+	{
+		RF_CALL(readRegister<Dw3110::IP_TS, 2, 5>(std::span<uint8_t>(scratch).first<2>()));
+	}
+	RF_END_RETURN(uint16_t(scratch[0] | ((scratch[1] & 0x3F) << 8) |
+						   ((scratch[1] & 0x20) ? 0xC0000 : 0x0000)));
 }
 
 template<typename SpiMaster, typename Cs>
