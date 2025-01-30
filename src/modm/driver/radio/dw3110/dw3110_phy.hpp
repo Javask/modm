@@ -355,6 +355,10 @@ public:
 	modm::ResumableResult<void>
 	reuseLastSTSIV();
 
+	/// Enable access to CIR information
+	modm::ResumableResult<void>
+	enableCIRDiagnostics();
+
 	/// Return the index inside the accumulator memory corresponding to the peak in the channel
 	/// impulse response estimation
 	modm::ResumableResult<uint16_t>

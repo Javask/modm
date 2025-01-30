@@ -987,20 +987,30 @@ modm::Dw3110Phy<SpiMaster, Cs>::checkTXFailed()
 }
 
 template<typename SpiMaster, typename Cs>
+modm::ResumableResult<void>
+modm::Dw3110Phy<SpiMaster, Cs>::enableCIRDiagnostics()
+{
+	RF_BEGIN();
+	constexpr static uint8_t or_mask[] = {0x00};
+	constexpr static uint8_t and_mask[] = {0xEF};
+	RF_CALL(writeRegisterMasked<Dw3110::CIA_CONF, 1, 2>(or_mask, and_mask));
+	RF_END();
+}
+
+template<typename SpiMaster, typename Cs>
 modm::ResumableResult<uint16_t>
 modm::Dw3110Phy<SpiMaster, Cs>::getPeakCIRSampleIndex(bool use_sts_cir)
 {
 	RF_BEGIN();
 	if (!use_sts_cir)
 	{
-		RF_CALL(
-			readRegister<Dw3110::IP_DIAG_0, 2, 2>(std::span<uint8_t>(scratch).first<2>()));
+		RF_CALL(readRegister<Dw3110::IP_DIAG_0, 2, 2>(std::span<uint8_t>(scratch).first<2>()));
 	} else
 	{
-		RF_CALL(
-			readRegister<Dw3110::STS_DIAG_0, 2, 2>(std::span<uint8_t>(scratch).first<2>()));
+		RF_CALL(readRegister<Dw3110::STS_DIAG_0, 2, 2>(std::span<uint8_t>(scratch).first<2>()));
 	}
-	RF_END_RETURN(((uint16_t)(scratch[1] & 0x7F)) << 3 | ((uint16_t)(scratch[0] & 0xE0)) >> 5);
+	RF_END_RETURN((((uint16_t)(scratch[1] & 0x7F)) << 3 | ((uint16_t)(scratch[0] & 0xE0)) >> 5) +
+				  (use_sts_cir ? 1024 : 0));
 }
 
 template<typename SpiMaster, typename Cs>
@@ -1008,7 +1018,7 @@ modm::ResumableResult<void>
 modm::Dw3110Phy<SpiMaster, Cs>::enableAccumulatorMemory()
 {
 	RF_BEGIN();
-	constexpr static uint8_t or_mask[] = {0x20, 0x80};
+	constexpr static uint8_t or_mask[] = {0x40, 0x80};
 	constexpr static uint8_t and_mask[] = {0xFF, 0xFF};
 	RF_CALL(writeRegisterMasked<Dw3110::CLK_CTRL, 2>(or_mask, and_mask));
 	RF_END();
@@ -1018,9 +1028,7 @@ template<typename SpiMaster, typename Cs>
 modm::ResumableResult<void>
 modm::Dw3110Phy<SpiMaster, Cs>::readAccumulatorMemory(uint16_t index, std::span<uint8_t, 6> out)
 {
-	RF_BEGIN();
-	RF_CALL(readRegisterBankIndirect<Dw3110::ACC_MEM_BANK, 6, 1>(index * 6, out));
-	RF_END();
+	return readRegisterBankIndirect<Dw3110::ACC_MEM_BANK, 6, 1>(index, out);
 }
 
 template<typename SpiMaster, typename Cs>
@@ -1199,13 +1207,11 @@ modm::Dw3110Phy<SpiMaster, Cs>::readRegisterBankIndirect(uint16_t offset,
 	scratch[0] = (uint8_t)Reg.addr;
 	scratch[1] = (uint8_t)((offset >> 0) & 0xFF);
 	scratch[2] = (uint8_t)((offset >> 8) & 0xFF);
-
 	RF_CALL(writeRegister<Dw3110::PTR_ADDR_A, 1>(std::span<const uint8_t>(scratch).first<1>()));
 	RF_CALL(
 		writeRegister<Dw3110::PTR_OFFSET_A, 2>(std::span<const uint8_t>(scratch).subspan<1, 2>()));
 	RF_WAIT_UNTIL(this->acquireMaster());
-
-	tx_buffer[0] = Dw3110::INDIRECT_PTR_A.addr;
+	tx_buffer[0] = (uint8_t)((Dw3110::INDIRECT_PTR_A.addr << 1) & 0x3E);
 
 	Cs::setOutput(false);
 	RF_CALL(SpiMaster::transfer(tx_buffer.data(), nullptr, 1));
