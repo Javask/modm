@@ -1032,7 +1032,7 @@ modm::Dw3110Phy<SpiMaster, Cs>::getPeakCIRSampleIndex(bool use_sts_cir)
 }
 
 template<typename SpiMaster, typename Cs>
-modm::ResumableResult<uint16_t>
+modm::ResumableResult<int16_t>
 modm::Dw3110Phy<SpiMaster, Cs>::getEstimatedPoA(bool use_sts)
 {
 	RF_BEGIN();
@@ -1043,8 +1043,8 @@ modm::Dw3110Phy<SpiMaster, Cs>::getEstimatedPoA(bool use_sts)
 	{
 		RF_CALL(readRegister<Dw3110::IP_TS, 2, 5>(std::span<uint8_t>(scratch).first<2>()));
 	}
-	RF_END_RETURN(uint16_t(scratch[0] | ((scratch[1] & 0x3F) << 8) |
-						   ((scratch[1] & 0x20) ? 0xC0000 : 0x0000)));
+	RF_END_RETURN((int16_t)(((uint16_t)scratch[0] | ((uint16_t)(scratch[1] & 0x3F) << 8)) << 2) /
+				  4);
 }
 
 template<typename SpiMaster, typename Cs>

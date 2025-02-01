@@ -359,9 +359,8 @@ public:
 	modm::ResumableResult<void>
 	enableCIRDiagnostics();
 
-
-	/// Return the index inside the accumulator memory corresponding to the first path in the channel
-	/// impulse response estimation
+	/// Return the index inside the accumulator memory corresponding to the first path in the
+	/// channel impulse response estimation
 	modm::ResumableResult<uint16_t>
 	getFirstPathCIRSampleIndex(bool use_sts_cir = false);
 
@@ -370,8 +369,9 @@ public:
 	modm::ResumableResult<uint16_t>
 	getPeakCIRSampleIndex(bool use_sts_cir = false);
 
-	/// Return the internally computed 14 bit Phase of arrival estimate either of the STS or the preamble
-	modm::ResumableResult<uint16_t>
+	/// Return the internally computed 2.12 bit twos-complement fixed point Phase of arrival
+	/// estimate either of the STS or the preamble.
+	modm::ResumableResult<int16_t>
 	getEstimatedPoA(bool use_sts = false);
 
 	/// Enable access to the raw CIR accumulator memory
