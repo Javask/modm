@@ -463,6 +463,59 @@ struct Dw3110
 		STS0,
 		STS1,
 	};
+
+	// Double buffer operation
+	enum class RDBDMode : uint8_t
+	{
+		Disabled = 0x00,  // Default mode
+		Minimal = 0x01,   // Only copy 7 registers
+		Medium = 0x02,    // Copy 6 additional registers
+		All = 0x04,       // Copy all CIA diagnostics registers
+	};
+
+	// Bitset
+	enum class DBSet : uint8_t
+	{
+		NONE = 0x00,
+		SET_1 = 0x01,
+		SET_2 = 0x02,
+	};
+
+	using DBROffset = uint16_t;
+
+	static constexpr uint16_t DBR_SET_1_OFFSET{0x00};
+	static constexpr uint16_t DBR_SET_2_OFFSET{0xE8};
+
+	static constexpr DBROffset DB_RX_FINFO{0x00};
+	static constexpr DBROffset DB_RX_TIME{0x04};
+	static constexpr DBROffset DB_CIA_DIAG_0{0x0C};
+	static constexpr DBROffset DB_TDOA{0x10};
+	static constexpr DBROffset DB_PDOA{0x14};
+	static constexpr DBROffset DB_IP_DIAG_12{0x1C};
+	static constexpr DBROffset DB_IP_TS{0x20};
+	static constexpr DBROffset DB_STS_TS{0x28};
+	static constexpr DBROffset DB_STS1_TS{0x30};
+	static constexpr DBROffset DB_CIA_DIAG_1{0x38};
+	static constexpr DBROffset DB_IP_DIAG_0{0x3C};
+	static constexpr DBROffset DB_IP_DIAG_1{0x40};
+	static constexpr DBROffset DB_IP_DIAG_2{0x44};
+	static constexpr DBROffset DB_IP_DIAG_3{0x48};
+	static constexpr DBROffset DB_IP_DIAG_4{0x4C};
+	static constexpr DBROffset DB_IP_DIAG_8{0x58};
+	static constexpr DBROffset DB_STS_DIAG_0{0x6C};
+	static constexpr DBROffset DB_STS_DIAG_1{0x70};
+	static constexpr DBROffset DB_STS_DIAG_2{0x74};
+	static constexpr DBROffset DB_STS_DIAG_3{0x78};
+	static constexpr DBROffset DB_STS_DIAG_4{0x7C};
+	static constexpr DBROffset DB_STS_DIAG_8{0x8C};
+	static constexpr DBROffset DB_STS_DIAG_12{0x9C};
+	static constexpr DBROffset DB_STS1_DIAG_0{0xB4};
+	static constexpr DBROffset DB_STS1_DIAG_1{0xB8};
+	static constexpr DBROffset DB_STS1_DIAG_2{0xBC};
+	static constexpr DBROffset DB_STS1_DIAG_3{0xC0};
+	static constexpr DBROffset DB_STS1_DIAG_4{0xC4};
+	static constexpr DBROffset DB_STS1_DIAG_8{0xD4};
+	static constexpr DBROffset DB_STS1_DIAG_12{0xE4};
 };
 
 }  // namespace modm

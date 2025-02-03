@@ -239,8 +239,9 @@ public:
 	startReceive();
 
 	/// Check if a packet has been successfully received
+	/// @param set Set to the ready buffer set in double buffer mode, not set otherwise
 	modm::ResumableResult<bool>
-	packetReady();
+	packetReady(Dw3110::DBSet *set = nullptr);
 
 	/// Check if the chip is currently in RX mode
 	modm::ResumableResult<bool>
@@ -250,8 +251,22 @@ public:
 	/// received flags
 	/// @param payload Region of memory the payload will be written to
 	/// @param payload_len Contains the length of the received payload
+	/// @param set The double buffer set to use in double buffer mode, ignored otherwise
 	modm::ResumableResult<bool>
-	fetchPacket(std::span<uint8_t> payload, size_t &payload_len);
+	fetchPacket(std::span<uint8_t> payload, size_t &payload_len,
+				Dw3110::DBSet set = Dw3110::DBSet::SET_1);
+
+	/// Enable Double buffer mode
+	/// @param value If true enable DB mode, otherwise disable
+	/// @warning Requires use of the DB functions if enabled
+	modm::ResumableResult<void>
+	setEnableDoubleBuffer(bool value);
+
+	/// Release the packet in the set, enabling the chip to reuse the buffer. \n
+	/// Only needed in double buffer mode. Also clears the corresponding flags
+	///@param set Which set to release
+	modm::ResumableResult<void>
+	releasePacket(Dw3110::DBSet set);
 
 	/// Transmit a given package using the current configuration using a given transmission mode
 	/// @param payload Span to the desired payload
@@ -400,7 +415,8 @@ protected:
 	/// submitted to the chip
 	template<modm::Dw3110::FastCommand Cmd>
 	modm::ResumableResult<Error>
-	transmitGeneric(std::span<const uint8_t> payload, bool ranging, bool fast, bool waitForCompletion);
+	transmitGeneric(std::span<const uint8_t> payload, bool ranging, bool fast,
+					bool waitForCompletion);
 
 	/// Only load configuration independent stuff, everything else should be
 	/// initialized when changing those parts
@@ -492,7 +508,7 @@ private:
 
 	Dw3110::SystemStatus_t system_status{0};
 	uint16_t preamble_len{0}, sfd_len{0}, pac_len{0}, sfd_toc_val{0}, fcs_len{2};
-	bool long_frames{false};
+	bool long_frames{false}, db_enabled{false};
 	Dw3110::SystemState chip_state{Dw3110::SystemState::OFF};
 	std::array<uint8_t, 16> scratch{};
 	std::array<uint8_t, 6> sys_status{}, tx_info{};

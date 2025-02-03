@@ -1129,31 +1129,109 @@ modm::Dw3110Phy<SpiMaster, Cs>::startReceive()
 
 template<typename SpiMaster, typename Cs>
 modm::ResumableResult<bool>
-modm::Dw3110Phy<SpiMaster, Cs>::fetchPacket(std::span<uint8_t> payload, size_t &payload_len)
+modm::Dw3110Phy<SpiMaster, Cs>::fetchPacket(std::span<uint8_t> payload, size_t &payload_len,
+											Dw3110::DBSet set)
 {
 	RF_BEGIN();
+	if (!db_enabled)
+	{
+		RF_CALL(readRegister<Dw3110::RX_FINFO, 4>(rx_finfo));
+	} else if (set == Dw3110::DBSet::SET_1)
+	{
+		RF_CALL(readRegisterBankIndirect<Dw3110::DB_DIAG, 4, 0>(
+			Dw3110::DBR_SET_1_OFFSET + Dw3110::DB_RX_FINFO, rx_finfo));
+	} else
+	{
+		RF_CALL(readRegisterBankIndirect<Dw3110::DB_DIAG, 4, 0>(
+			Dw3110::DBR_SET_2_OFFSET + Dw3110::DB_RX_FINFO, rx_finfo));
+	}
 
-	RF_CALL(readRegister<Dw3110::RX_FINFO, 4>(rx_finfo));
 	payload_len = (rx_finfo[0] | ((rx_finfo[1] & 0x03) << 8));
 	if (payload_len >= fcs_len) payload_len -= fcs_len;
 	if (payload.size() < payload_len) { RF_RETURN(false); }
-	RF_CALL(readRegisterBank<Dw3110::RX_BUFFER_0_BANK>(payload, payload_len));
 
-	// Clear most rx flags
-	RF_CALL(clearStatusBits(Dw3110::SystemStatus::RXFR | Dw3110::SystemStatus::RXPHE |
-							Dw3110::SystemStatus::RXFCG | Dw3110::SystemStatus::RXFCE |
-							Dw3110::SystemStatus::RXSFDD | Dw3110::SystemStatus::RXPRD |
-							Dw3110::SystemStatus::RXPHD | Dw3110::SystemStatus::RXFSL));
+	if (!db_enabled || set == Dw3110::DBSet::SET_1)
+	{
+		RF_CALL(readRegisterBank<Dw3110::RX_BUFFER_0_BANK>(payload, payload_len));
+	} else
+	{
+		RF_CALL(readRegisterBank<Dw3110::RX_BUFFER_1_BANK>(payload, payload_len));
+	}
+
+	if (!db_enabled)
+	{
+		// Clear most rx flags
+		RF_CALL(clearStatusBits(Dw3110::SystemStatus::RXFR | Dw3110::SystemStatus::RXPHE |
+								Dw3110::SystemStatus::RXFCG | Dw3110::SystemStatus::RXFCE |
+								Dw3110::SystemStatus::RXSFDD | Dw3110::SystemStatus::RXPRD |
+								Dw3110::SystemStatus::RXPHD | Dw3110::SystemStatus::RXFSL));
+	}
 	RF_END_RETURN(true);
 }
 
 template<typename SpiMaster, typename Cs>
 modm::ResumableResult<bool>
-modm::Dw3110Phy<SpiMaster, Cs>::packetReady()
+modm::Dw3110Phy<SpiMaster, Cs>::packetReady(Dw3110::DBSet *set)
 {
 	RF_BEGIN();
+	if (db_enabled)
+	{
+		RF_CALL(readRegister<Dw3110::RDB_STATUS, 1>(std::span<uint8_t>(scratch).first<1>()));
+		if (set != nullptr)
+		{
+			*set = Dw3110::DBSet::NONE;
+			if ((scratch[0] & 0x03) == 0x03) { *(uint8_t*)&set |= (uint8_t)Dw3110::DBSet::SET_1; }
+			if ((scratch[0] & 0x30) == 0x30) { *(uint8_t*)&set |= (uint8_t)Dw3110::DBSet::SET_2; }
+		}
+		RF_RETURN(((scratch[0] & 0x03) == 0x03) || ((scratch[0] & 0x30) == 0x30));
+	}
 	RF_CALL(fetchSystemStatus());
 	RF_END_RETURN(system_status.all(Dw3110::SystemStatus::RXFR | Dw3110::SystemStatus::RXFCG));
+}
+
+template<typename SpiMaster, typename Cs>
+modm::ResumableResult<void>
+modm::Dw3110Phy<SpiMaster, Cs>::setEnableDoubleBuffer(bool value)
+{
+	RF_BEGIN();
+	if (value)
+	{
+		constexpr static uint8_t diag_mode[] = {(uint8_t)Dw3110::RDBDMode::Minimal};
+		RF_CALL(writeRegister<Dw3110::RDB_DIAG, 1>(diag_mode));
+		constexpr static uint8_t or_mask[] = {0x00, 0x00};
+		constexpr static uint8_t and_mask[] = {0xF7, 0xFB};
+		RF_CALL(writeRegisterMasked<Dw3110::SYS_CFG, 2>(or_mask, and_mask));
+		db_enabled = true;
+	} else
+	{
+		constexpr static uint8_t or_mask[] = {0x08, 0x00};
+		constexpr static uint8_t and_mask[] = {0xFF, 0xFF};
+		RF_CALL(writeRegisterMasked<Dw3110::SYS_CFG, 2>(or_mask, and_mask));
+		constexpr static uint8_t diag_mode[] = {(uint8_t)Dw3110::RDBDMode::Disabled};
+		RF_CALL(writeRegister<Dw3110::RDB_DIAG, 1>(diag_mode));
+		db_enabled = false;
+	}
+	RF_END();
+}
+
+template<typename SpiMaster, typename Cs>
+modm::ResumableResult<void>
+modm::Dw3110Phy<SpiMaster, Cs>::releasePacket(Dw3110::DBSet set)
+{
+	RF_BEGIN();
+	static constexpr uint8_t or_mask[] = {0x00};
+	if (set == Dw3110::DBSet::SET_1)
+	{
+		static constexpr uint8_t and_mask[] = {0xF0};
+		RF_CALL(writeRegisterMasked<Dw3110::RDB_STATUS, 1>(or_mask, and_mask));
+	} else
+	{
+		static constexpr uint8_t and_mask[] = {0x0F};
+		RF_CALL(writeRegisterMasked<Dw3110::RDB_STATUS, 1>(or_mask, and_mask));
+	}
+
+	RF_CALL(sendCommand<Dw3110::FastCommand::CMD_DB_TOGGLE>());
+	RF_END();
 }
 
 template<typename SpiMaster, typename Cs>
