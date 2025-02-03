@@ -367,17 +367,17 @@ public:
 	/// Return the index inside the accumulator memory corresponding to the first path in the
 	/// channel impulse response estimation
 	modm::ResumableResult<uint16_t>
-	getFirstPathCIRSampleIndex(bool use_sts_cir = false);
+	getFirstPathCIRSampleIndex(Dw3110::TimestampSource ts = Dw3110::TimestampSource::IP);
 
 	/// Return the index inside the accumulator memory corresponding to the peak in the channel
 	/// impulse response estimation
 	modm::ResumableResult<uint16_t>
-	getPeakCIRSampleIndex(bool use_sts_cir = false);
+	getPeakCIRSampleIndex(Dw3110::TimestampSource ts = Dw3110::TimestampSource::IP);
 
 	/// Return the internally computed 2.12 bit twos-complement fixed point Phase of arrival
 	/// estimate either of the STS or the preamble.
 	modm::ResumableResult<int16_t>
-	getEstimatedPoA(bool use_sts = false);
+	getEstimatedPoA(Dw3110::TimestampSource ts = Dw3110::TimestampSource::IP);
 
 	/// Enable access to the raw CIR accumulator memory
 	modm::ResumableResult<void>

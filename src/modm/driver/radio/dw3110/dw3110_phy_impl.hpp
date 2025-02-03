@@ -1002,47 +1002,60 @@ modm::Dw3110Phy<SpiMaster, Cs>::enableCIRDiagnostics()
 
 template<typename SpiMaster, typename Cs>
 modm::ResumableResult<uint16_t>
-modm::Dw3110Phy<SpiMaster, Cs>::getFirstPathCIRSampleIndex(bool use_sts_cir)
+modm::Dw3110Phy<SpiMaster, Cs>::getFirstPathCIRSampleIndex(Dw3110::TimestampSource ts)
 {
 	RF_BEGIN();
-	if (!use_sts_cir)
+	if (ts == Dw3110::TimestampSource::IP)
 	{
 		RF_CALL(readRegister<Dw3110::IP_DIAG_8, 2>(std::span<uint8_t>(scratch).first<2>()));
-	} else
+		// Round to nearest full sample
+		*((uint16_t *)scratch.data()) += 0x20;
+		RF_RETURN((((uint16_t)scratch[1]) << 8 | ((uint16_t)scratch[0])) >> 6);
+	} else if (ts == Dw3110::TimestampSource::STS0)
 	{
 		RF_CALL(readRegister<Dw3110::STS_DIAG_8, 2>(std::span<uint8_t>(scratch).first<2>()));
+		// Round to nearest full sample
+		*((uint16_t *)scratch.data()) += 0x20;
+		RF_RETURN(((((uint16_t)scratch[1]) << 8 | ((uint16_t)scratch[0])) >> 6) + 1024);
 	}
+	RF_CALL(readRegister<Dw3110::STS1_DIAG_8, 2>(std::span<uint8_t>(scratch).first<2>()));
 	// Round to nearest full sample
 	*((uint16_t *)scratch.data()) += 0x20;
-	RF_END_RETURN(((((uint16_t)scratch[1]) << 8 | ((uint16_t)scratch[0])) >> 6) +
-				  (use_sts_cir ? 1024 : 0));
+	RF_END_RETURN(((((uint16_t)scratch[1]) << 8 | ((uint16_t)scratch[0])) >> 6) + 1536);
 }
 
 template<typename SpiMaster, typename Cs>
 modm::ResumableResult<uint16_t>
-modm::Dw3110Phy<SpiMaster, Cs>::getPeakCIRSampleIndex(bool use_sts_cir)
+modm::Dw3110Phy<SpiMaster, Cs>::getPeakCIRSampleIndex(Dw3110::TimestampSource ts)
 {
 	RF_BEGIN();
-	if (!use_sts_cir)
+	if (ts == Dw3110::TimestampSource::IP)
 	{
 		RF_CALL(readRegister<Dw3110::IP_DIAG_0, 2, 2>(std::span<uint8_t>(scratch).first<2>()));
-	} else
+		RF_RETURN((((uint16_t)(scratch[1] & 0x7F)) << 3 | ((uint16_t)(scratch[0] & 0xE0)) >> 5));
+	} else if (ts == Dw3110::TimestampSource::STS0)
 	{
 		RF_CALL(readRegister<Dw3110::STS_DIAG_0, 2, 2>(std::span<uint8_t>(scratch).first<2>()));
+		RF_RETURN((((uint16_t)(scratch[1] & 0x7F)) << 3 | ((uint16_t)(scratch[0] & 0xE0)) >> 5) +
+				  1024);
 	}
+	RF_CALL(readRegister<Dw3110::STS1_DIAG_0, 2, 2>(std::span<uint8_t>(scratch).first<2>()));
 	RF_END_RETURN((((uint16_t)(scratch[1] & 0x7F)) << 3 | ((uint16_t)(scratch[0] & 0xE0)) >> 5) +
-				  (use_sts_cir ? 1024 : 0));
+				  1536);
 }
 
 template<typename SpiMaster, typename Cs>
 modm::ResumableResult<int16_t>
-modm::Dw3110Phy<SpiMaster, Cs>::getEstimatedPoA(bool use_sts)
+modm::Dw3110Phy<SpiMaster, Cs>::getEstimatedPoA(Dw3110::TimestampSource ts)
 {
 	RF_BEGIN();
-	if (use_sts)
+	if (ts == Dw3110::TimestampSource::STS1)
+	{
+		RF_CALL(readRegister<Dw3110::STS1_TS, 2, 5>(std::span<uint8_t>(scratch).first<2>()));
+	} else if (ts == Dw3110::TimestampSource::STS0)
 	{
 		RF_CALL(readRegister<Dw3110::STS_TS, 2, 5>(std::span<uint8_t>(scratch).first<2>()));
-	} else
+	} else if (ts == Dw3110::TimestampSource::IP)
 	{
 		RF_CALL(readRegister<Dw3110::IP_TS, 2, 5>(std::span<uint8_t>(scratch).first<2>()));
 	}
