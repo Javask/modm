@@ -889,7 +889,7 @@ template<typename SpiMaster, typename Cs>
 template<modm::Dw3110Phy<SpiMaster, Cs>::DelayTXMode dmode>
 modm::ResumableResult<typename modm::Dw3110Phy<SpiMaster, Cs>::Error>
 modm::Dw3110Phy<SpiMaster, Cs>::transmitDelayed(uint32_t time, std::span<const uint8_t> payload,
-												bool ranging, bool fast)
+												bool ranging, bool fast, bool waitForCompletion)
 {
 	RF_BEGIN();
 	scratch[0] = (time >> 0) & 0xFF;
@@ -897,22 +897,24 @@ modm::Dw3110Phy<SpiMaster, Cs>::transmitDelayed(uint32_t time, std::span<const u
 	scratch[2] = (time >> 16) & 0xFF;
 	scratch[3] = (time >> 24) & 0xFF;
 	RF_CALL(writeRegister<Dw3110::DX_TIME, 4>(std::span<const uint8_t>(scratch).first<4>()));
-	RF_END_RETURN_CALL(transmitGeneric<txModeToCmdDelay<dmode>()>(payload, ranging, fast));
+	RF_END_RETURN_CALL(
+		transmitGeneric<txModeToCmdDelay<dmode>()>(payload, ranging, fast, waitForCompletion));
 }
 
 template<typename SpiMaster, typename Cs>
 template<modm::Dw3110Phy<SpiMaster, Cs>::TXMode tmode>
 modm::ResumableResult<typename modm::Dw3110Phy<SpiMaster, Cs>::Error>
-modm::Dw3110Phy<SpiMaster, Cs>::transmit(std::span<const uint8_t> payload, bool ranging, bool fast)
+modm::Dw3110Phy<SpiMaster, Cs>::transmit(std::span<const uint8_t> payload, bool ranging, bool fast,
+										 bool waitForCompletion)
 {
-	return transmitGeneric<txModeToCmd<tmode>()>(payload, ranging, fast);
+	return transmitGeneric<txModeToCmd<tmode>()>(payload, ranging, fast, waitForCompletion);
 }
 
 template<typename SpiMaster, typename Cs>
 template<modm::Dw3110::FastCommand Cmd>
 modm::ResumableResult<typename modm::Dw3110Phy<SpiMaster, Cs>::Error>
 modm::Dw3110Phy<SpiMaster, Cs>::transmitGeneric(std::span<const uint8_t> payload, bool ranging,
-												bool fast)
+												bool fast, bool waitForCompletion)
 {
 	RF_BEGIN();
 	if ((long_frames && payload.size() > 1021) || (!long_frames && payload.size() > 125))
@@ -939,6 +941,7 @@ modm::Dw3110Phy<SpiMaster, Cs>::transmitGeneric(std::span<const uint8_t> payload
 
 	RF_CALL(writeRegister<Dw3110::TX_FCTRL, 6>(tx_info));
 	RF_CALL(sendCommand<Cmd>());
+	if (!waitForCompletion) { RF_RETURN(Error::None); }
 
 	RF_CALL(fetchSystemStatus());
 	RF_CALL(fetchChipState());

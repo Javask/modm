@@ -257,9 +257,12 @@ public:
 	/// @param payload Span to the desired payload
 	/// @param ranging Decides whether or not to set the ranging bit in the header
 	/// @param fast Decides if the data portion is sent at 850kbps or 6.8Mbps
+	/// @param waitForCompletion If false the function immediately returns after the command is
+	/// submitted to the chip
 	template<TXMode tmode = TXMode::Default>
 	modm::ResumableResult<Error>
-	transmit(const std::span<const uint8_t> payload, bool ranging = true, bool fast = true);
+	transmit(const std::span<const uint8_t> payload, bool ranging = true, bool fast = true,
+			 bool waitForCompletion = true);
 
 	/// Set the reference time value \n
 	/// Used as the reference in @ref transmitDelayed() when using DelayTXMode::DelayWRTRef and
@@ -274,11 +277,13 @@ public:
 	/// @param fast Decides if the data portion is sent at 850kbps or 6.8Mbps
 	/// @param time Either the transmission time or a delay in units of 4ns dependent on the
 	/// DelayTXMode provided
+	/// @param waitForCompletion If false the function immediately returns after the command is
+	/// submitted to the chip
 	/// @warning This transmission mode does not respect the clear channel assessment
 	template<DelayTXMode dmode = DelayTXMode::AtTime>
 	modm::ResumableResult<Error>
 	transmitDelayed(uint32_t time, const std::span<const uint8_t> payload, bool ranging = true,
-					bool fast = true);
+					bool fast = true, bool waitForCompletion = true);
 
 	/// Read the current system status register
 	modm::ResumableResult<Dw3110::SystemStatus_t>
@@ -391,9 +396,11 @@ protected:
 	/// @param ranging Decides whether or not to set the ranging bit in the header
 	/// @param fast Decides if the data portion is sent at 850kbps or 6.8Mbps
 	/// command
+	/// @param waitForCompletion If false the function immediately returns after the command is
+	/// submitted to the chip
 	template<modm::Dw3110::FastCommand Cmd>
 	modm::ResumableResult<Error>
-	transmitGeneric(std::span<const uint8_t> payload, bool ranging, bool fast);
+	transmitGeneric(std::span<const uint8_t> payload, bool ranging, bool fast, bool waitForCompletion);
 
 	/// Only load configuration independent stuff, everything else should be
 	/// initialized when changing those parts
