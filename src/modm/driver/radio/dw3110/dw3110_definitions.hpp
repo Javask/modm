@@ -201,6 +201,7 @@ struct Dw3110
 	static constexpr OTPAddr BIASTUNE_CAL{.or_mask = {0x0A, 0x00}, .and_mask = {0x0A, 0xFC}};
 	static constexpr OTPAddr LDOTUNE_CAL_1{.or_mask = {0x04, 0x00}, .and_mask = {0x04, 0xFC}};
 	static constexpr OTPAddr LDOTUNE_CAL_2{.or_mask = {0x05, 0x00}, .and_mask = {0x05, 0xFC}};
+	static constexpr OTPAddr PLL_LOCK_CODE{.or_mask = {0x35, 0x00}, .and_mask = {0x35, 0xFC}};
 
 	struct RegisterBank
 	{
@@ -359,7 +360,7 @@ struct Dw3110
 
 	// Subregisters for FS_CTRL
 	static constexpr Register PLL_CFG{.bank = FS_CTRL, .offset = 0x0, .length = 2};
-	static constexpr Register PLL_CC{.bank = FS_CTRL, .offset = 0x4, .length = 1};
+	static constexpr Register PLL_CC{.bank = FS_CTRL, .offset = 0x4, .length = 3};
 	static constexpr Register PLL_CAL{.bank = FS_CTRL, .offset = 0x8, .length = 2};
 	static constexpr Register XTAL{.bank = FS_CTRL, .offset = 0x14, .length = 1};
 

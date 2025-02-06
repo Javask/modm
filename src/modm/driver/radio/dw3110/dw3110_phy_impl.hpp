@@ -53,7 +53,7 @@ modm::Dw3110Phy<SpiMaster, Cs>::initialize(Dw3110::Channel channel, Dw3110::Prea
 	{
 		if (timeout.execute())
 		{
-			MODM_LOG_ERROR << "Timeout waiting for IDLE State!" << (int)chip_state << modm::endl;
+			MODM_LOG_ERROR << "Timeout waiting for IDLE State!" << modm::endl;
 			RF_RETURN(false);
 		}
 		RF_YIELD();
@@ -97,11 +97,11 @@ modm::Dw3110Phy<SpiMaster, Cs>::initialize(Dw3110::Channel channel, Dw3110::Prea
 			MODM_LOG_ERROR << "Failed to reach IDLE_PLL State!" << modm::endl;
 			RF_RETURN(false);
 		}
-		fetchSystemStatus();
+		fetchChipState();
 	}
 
 	if (!RF_CALL(calibrate())) { RF_RETURN(false); }
-	RF_CALL(setChannel(channel));
+	if (!RF_CALL(setChannel(channel))) { RF_RETURN(false); }
 	RF_CALL(setPreambleCode(pcode, pcode));
 	RF_CALL(setPreambleLength(plen));
 	RF_CALL(setSFD(sfd));
@@ -476,7 +476,7 @@ modm::Dw3110Phy<SpiMaster, Cs>::calibrate()
 }
 
 template<typename SpiMaster, typename Cs>
-modm::ResumableResult<void>
+modm::ResumableResult<bool>
 modm::Dw3110Phy<SpiMaster, Cs>::setChannel(Dw3110::Channel channel)
 {
 	RF_BEGIN();
@@ -524,14 +524,109 @@ modm::Dw3110Phy<SpiMaster, Cs>::setChannel(Dw3110::Channel channel)
 		constexpr static uint8_t chan_ctrl_and[] = {0xFE};
 		RF_CALL(writeRegisterMasked<Dw3110::CHAN_CTRL, 1>(chan_ctrl_or, chan_ctrl_and));
 	}
+	RF_END_RETURN_CALL(recalibratePLL(false));
+}
 
-	constexpr static uint8_t pll_cfg_ld_magic[] = {0x81};
-	RF_CALL(writeRegister<Dw3110::PLL_CAL, 1>(pll_cfg_ld_magic));
+template<typename SpiMaster, typename Cs>
+modm::ResumableResult<bool>
+modm::Dw3110Phy<SpiMaster, Cs>::recalibratePLL(bool useOld)
+{
+	RF_BEGIN();
+	// Return to IDLE_RC
+	constexpr static uint8_t clear_a2init_or_mask[] = {0x00};
+	constexpr static uint8_t clear_a2init_and_mask[] = {0xFE};
+	RF_CALL(
+		writeRegisterMasked<Dw3110::SEQ_CTRL, 1, 1>(clear_a2init_or_mask, clear_a2init_and_mask));
+	constexpr static uint8_t or_mask_2[] = {0x03};
+	constexpr static uint8_t and_mask_2[] = {0xFF};
+	RF_CALL(writeRegisterMasked<Dw3110::CLK_CTRL, 1>(or_mask_2, and_mask_2));
+	constexpr static uint8_t set_force2init_or_mask[] = {0x80};
+	constexpr static uint8_t set_force2init_and_mask[] = {0xFF};
+	RF_CALL(writeRegisterMasked<Dw3110::SEQ_CTRL, 1, 2>(set_force2init_or_mask,
+														set_force2init_and_mask));
 
+	// Loop until valid state
+	timeout.restart(1ms);
+	while (chip_state != Dw3110::SystemState::IDLE_RC)
+	{
+		if (timeout.execute())
+		{
+			MODM_LOG_ERROR << "Timeout waiting for IDLE_RC State!" << modm::endl;
+			RF_RETURN(false);
+		}
+		RF_YIELD();
+		RF_CALL(fetchChipState());
+	}
+
+	constexpr static uint8_t clear_force2init_or_mask[] = {0x00};
+	constexpr static uint8_t clear_force2init_and_mask[] = {0x7F};
+	RF_CALL(writeRegisterMasked<Dw3110::SEQ_CTRL, 1, 2>(clear_force2init_or_mask,
+														clear_force2init_and_mask));
+	constexpr static uint8_t or_mask_4[] = {0x00};
+	constexpr static uint8_t and_mask_4[] = {0xFC};
+	RF_CALL(writeRegisterMasked<Dw3110::CLK_CTRL, 1>(or_mask_4, and_mask_4));
+
+	if (useOld)
+	{
+		// Base on old configuration, also write updated value
+		constexpr static uint8_t pll_cfg_ld_magic[] = {0x83};
+		RF_CALL(writeRegister<Dw3110::PLL_CAL, 1>(pll_cfg_ld_magic));
+	} else
+	{
+		// Check if we have a preexisting configuration in memory
+		RF_CALL(readOTPMemory<Dw3110::PLL_LOCK_CODE>(otp_read));
+		if (otp_read[0] != 0x00 || otp_read[1] != 0x00 || otp_read[2] != 0x00)
+		{
+			RF_CALL(
+				writeRegister<Dw3110::PLL_CC, 3>(std::span<const uint8_t>(otp_read).first<3>()));
+			constexpr static uint8_t pll_cfg_ld_magic[] = {0x83};
+			RF_CALL(writeRegister<Dw3110::PLL_CAL, 1>(pll_cfg_ld_magic));
+		} else
+		{
+			// New configuration
+			constexpr static uint8_t pll_cfg_ld_magic[] = {0x81};
+			RF_CALL(writeRegister<Dw3110::PLL_CAL, 1>(pll_cfg_ld_magic));
+		}
+	}
+
+	// Recalibrate PLL
 	constexpr static uint8_t cal_enable_or[] = {0x01};
 	constexpr static uint8_t cal_enable_and[] = {0xFF};
 	RF_CALL(writeRegisterMasked<Dw3110::PLL_CAL, 1, 1>(cal_enable_or, cal_enable_and));
-	RF_END_RETURN();
+
+	RF_CALL(clearStatusBits(Dw3110::SystemStatus::PLL_HILO | Dw3110::SystemStatus::CPLOCK));
+
+	// Return to IDLE_PLL
+	constexpr static uint8_t ainit_on_or_mask[] = {0x01};
+	constexpr static uint8_t ainit_on_and_mask[] = {0xFF};
+	RF_CALL(writeRegisterMasked<Dw3110::SEQ_CTRL, 1, 1>(ainit_on_or_mask, ainit_on_and_mask));
+
+	timeout.restart(1ms);
+	RF_CALL(fetchChipState());
+	while (chip_state != Dw3110::SystemState::IDLE_PLL)
+	{
+		if (timeout.execute())
+		{
+			MODM_LOG_ERROR << "Failed to reach IDLE_PLL State!" << modm::endl;
+			RF_RETURN(false);
+		}
+		RF_YIELD();
+		fetchChipState();
+	}
+
+	timeout.restart(1ms);
+	RF_CALL(fetchSystemStatus());
+	while (system_status.none(Dw3110::SystemStatus::CPLOCK))
+	{
+		if (timeout.execute())
+		{
+			MODM_LOG_ERROR << "Failed to lock PLL!" << modm::endl;
+			RF_RETURN(false);
+		}
+		RF_YIELD();
+		fetchSystemStatus();
+	}
+	RF_END_RETURN(true);
 }
 
 template<typename SpiMaster, typename Cs>
@@ -1180,8 +1275,8 @@ modm::Dw3110Phy<SpiMaster, Cs>::packetReady(Dw3110::DBSet *set)
 		if (set != nullptr)
 		{
 			*set = Dw3110::DBSet::NONE;
-			if ((scratch[0] & 0x03) == 0x03) { *(uint8_t*)&set |= (uint8_t)Dw3110::DBSet::SET_1; }
-			if ((scratch[0] & 0x30) == 0x30) { *(uint8_t*)&set |= (uint8_t)Dw3110::DBSet::SET_2; }
+			if ((scratch[0] & 0x03) == 0x03) { *(uint8_t *)&set |= (uint8_t)Dw3110::DBSet::SET_1; }
+			if ((scratch[0] & 0x30) == 0x30) { *(uint8_t *)&set |= (uint8_t)Dw3110::DBSet::SET_2; }
 		}
 		RF_RETURN(((scratch[0] & 0x03) == 0x03) || ((scratch[0] & 0x30) == 0x30));
 	}

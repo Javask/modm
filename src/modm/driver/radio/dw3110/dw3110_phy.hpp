@@ -72,7 +72,8 @@ public:
 	Dw3110Phy();
 
 	/// Set the UWB channel used
-	modm::ResumableResult<void>
+	/// @return true if recalibration of the PLL succeded
+	modm::ResumableResult<bool>
 	setChannel(Dw3110::Channel channel);
 
 	/// Change Header format to non-standard to allow 1021 Byte payloads instead of
@@ -404,6 +405,13 @@ public:
 	/// Both the real and imaginary part only have 18 significant bits, the top 6 will always be 0
 	modm::ResumableResult<void>
 	readAccumulatorMemory(uint16_t index, std::span<uint8_t, 6> out);
+
+	/// @brief Recalibrate the PLL
+	/// Needs to be run when temperature changes more than 20° and channel 9 is used or when
+	/// changing channel
+	/// @param useOld Use the old calibration as a base for the new
+	modm::ResumableResult<bool>
+	recalibratePLL(bool useOld = true);
 
 protected:
 	/// Transmit a given package using the current configuration and a specific command
