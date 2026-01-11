@@ -242,12 +242,18 @@ modm::Dw3110Phy<SpiMaster, Cs>::readChipTime()
 
 template<typename SpiMaster, typename Cs>
 uint64_t
-modm::Dw3110Phy<SpiMaster, Cs>::getReceiveTimestamp()
+modm::Dw3110Phy<SpiMaster, Cs>::getReceiveTimestamp(RXBuffer rx_buffer)
 {
-	readRegister<Dw3110::RX_TIME, 5>(std::span<uint8_t>(scratch).first<5>());
-	return (uint64_t)scratch[0] | ((uint64_t)scratch[1] << 8) |
-				  ((uint64_t)scratch[2] << 16) | ((uint64_t)scratch[3] << 24) |
-				  ((uint64_t)scratch[4] << 32);
+	uint8_t rx_ts[5];
+	if (double_buffered)
+	{
+		readSwingRegister<Dw3110::RX_TIME, 5>(rx_buffer, rx_ts);
+	} else
+	{
+		readRegister<Dw3110::RX_TIME, 5>(rx_ts);
+	}
+	return (uint64_t)rx_ts[0] | ((uint64_t)rx_ts[1] << 8) | ((uint64_t)rx_ts[2] << 16) |
+		   ((uint64_t)rx_ts[3] << 24) | ((uint64_t)rx_ts[4] << 32);
 }
 
 template<typename SpiMaster, typename Cs>
@@ -936,7 +942,7 @@ template<typename SpiMaster, typename Cs>
 bool
 modm::Dw3110Phy<SpiMaster, Cs>::startReceive()
 {
-	if (this->packetReady()) return true;
+	if (packetReady()) return true;
 
 	fetchChipState();
 	if (chip_state == Dw3110::SystemState::RX || chip_state == Dw3110::SystemState::RX_WAIT)
@@ -966,28 +972,68 @@ modm::Dw3110Phy<SpiMaster, Cs>::startReceive()
 
 template<typename SpiMaster, typename Cs>
 bool
-modm::Dw3110Phy<SpiMaster, Cs>::fetchPacket(std::span<uint8_t> payload, size_t &payload_len)
+modm::Dw3110Phy<SpiMaster, Cs>::fetchPacket(std::span<uint8_t> payload, size_t &payload_len,
+											RXBuffer rx_buffer)
 {
-	readRegister<Dw3110::RX_FINFO, 4>(rx_finfo);
-	payload_len = (rx_finfo[0] | ((rx_finfo[1] & 0x03) << 8));
+	uint8_t rxfinfo[4];
+	if (double_buffered)
+	{
+		readSwingRegister<Dw3110::DB_RX_FINFO, 4>(rx_buffer, rxfinfo);
+	} else
+	{
+		readRegister<Dw3110::RX_FINFO, 4>(rxfinfo);
+	}
+	payload_len = (rxfinfo[0] | ((rxfinfo[1] & 0x03) << 8));
 	if (payload_len >= fcs_len) payload_len -= fcs_len;
 	if (payload.size() < payload_len) { return false; }
-	readRegisterBank<Dw3110::RX_BUFFER_0_BANK>(payload, payload_len);
-
+	if (!double_buffered || rx_buffer != RXBuffer::RX_BUFFER_1)
+	{
+		readRegisterBank<Dw3110::RX_BUFFER_0_BANK>(payload, payload_len);
+	} else
+	{
+		readRegisterBank<Dw3110::RX_BUFFER_1_BANK>(payload, payload_len);
+	}
 	// Clear most rx flags
 	clearStatusBits(Dw3110::SystemStatus::RXFR | Dw3110::SystemStatus::RXPHE |
 							Dw3110::SystemStatus::RXFCG | Dw3110::SystemStatus::RXFCE |
 							Dw3110::SystemStatus::RXSFDD | Dw3110::SystemStatus::RXPRD |
 							Dw3110::SystemStatus::RXPHD | Dw3110::SystemStatus::RXFSL);
+	if (double_buffered)
+	{
+		constexpr static uint8_t clearValOr[] = {0x00};
+		uint8_t clearValAnd[] = {(uint8_t)(rx_buffer == RXBuffer::RX_BUFFER_1 ? 0xF0 : 0x0F)};
+		writeRegisterMasked<Dw3110::RDB_STATUS, 1>(clearValOr, clearValAnd);
+	}
 	return true;
 }
 
 template<typename SpiMaster, typename Cs>
 bool
-modm::Dw3110Phy<SpiMaster, Cs>::packetReady()
+modm::Dw3110Phy<SpiMaster, Cs>::packetReady(RXBuffer_t *rx_buffer)
 {
-	fetchSystemStatus();
-	return system_status.all(Dw3110::SystemStatus::RXFR | Dw3110::SystemStatus::RXFCG);
+	if (double_buffered)
+	{
+		bool out = false;
+		if (rx_buffer) { *rx_buffer = {}; }
+
+		uint8_t rdb_status[] = {0x00};
+		readRegister<Dw3110::RDB_STATUS, 1>(rdb_status);
+		if ((rdb_status[0] & 0x03) == 0x03)
+		{
+			if (rx_buffer) { rx_buffer->set(RXBuffer::RX_BUFFER_0); }
+			out = true;
+		}
+		if ((rdb_status[0] & 0x30) == 0x30)
+		{
+			if (rx_buffer) { rx_buffer->set(RXBuffer::RX_BUFFER_1); }
+			out = true;
+		}
+		return out;
+	} else
+	{
+		fetchSystemStatus();
+		return system_status.all(Dw3110::SystemStatus::RXFR | Dw3110::SystemStatus::RXFCG);
+	}
 }
 
 template<typename SpiMaster, typename Cs>
@@ -995,7 +1041,7 @@ bool
 modm::Dw3110Phy<SpiMaster, Cs>::isReceiving()
 {
 	fetchChipState();
-	return chip_state == Dw3110::SystemState::RX;
+	return chip_state == Dw3110::SystemState::RX || chip_state == Dw3110::SystemState::RX_WAIT;
 }
 
 template<typename SpiMaster, typename Cs>
@@ -1056,12 +1102,47 @@ template<modm::Dw3110::Register Reg, size_t Len, size_t Offset>
 void
 modm::Dw3110Phy<SpiMaster, Cs>::readRegister(std::span<uint8_t, Len> out)
 {
+	constexpr uint8_t final_offset = Reg.offset + Offset;
+	if constexpr (final_offset >= 0x7F)
+	{
+		readAddressIndirect<Len>(final_offset, out);
+		return;
+	}
+
 	static_assert(Len <= Reg.length + Offset, "Size of read is too large for this register!");
 	modm::this_fiber::poll([&]{ return this->acquireMaster(); });
 
-	tx_buffer[0] =
-		(uint8_t)(0x40 | ((Reg.bank.addr << 1) & 0x3E) | (((Reg.offset + Offset) >> 6) & 0x01));
-	tx_buffer[1] = (uint8_t)(0x00 | ((Reg.offset + Offset) << 2));
+	tx_buffer[0] = (uint8_t)(0x40 | ((Reg.bank.addr << 1) & 0x3E) | (((final_offset) >> 6) & 0x01));
+	tx_buffer[1] = (uint8_t)(0x00 | ((final_offset) << 2));
+
+	Cs::setOutput(false);
+	SpiMaster::transfer(tx_buffer.data(), nullptr, 2);
+	SpiMaster::transfer(nullptr, out.data(), out.size());
+	Cs::setOutput(true);
+
+	this->releaseMaster();
+}
+
+template<typename SpiMaster, typename Cs>
+template<modm::Dw3110::Register Reg, size_t Len, size_t Offset>
+void
+modm::Dw3110Phy<SpiMaster, Cs>::readSwingRegister(RXBuffer rx_buffer, std::span<uint8_t, Len> out)
+{
+	uint8_t swing_offset = Reg.offset + Offset;
+	// If we want buffer 1, use the second register set
+	if (rx_buffer == RXBuffer::RX_BUFFER_1) { swing_offset += Dw3110::DB_DIAG_SET_2_offset; }
+	if (swing_offset >= 0x7F)
+	{
+		readAddressIndirect<Reg.bank, Len>(swing_offset, out);
+		return;
+	}
+
+	static_assert(Len <= Reg.length + Offset, "Size of read is too large for this register!");
+	modm::this_fiber::poll([&] { return this->acquireMaster(); });
+	static_assert(Reg.bank.addr == Dw3110::DB_DIAG.addr,
+				  "Only registers in DB_DIAG may be accessed as swing registers.");
+	tx_buffer[0] = (uint8_t)(0x40 | ((Reg.bank.addr << 1) & 0x3E) | ((swing_offset >> 6) & 0x01));
+	tx_buffer[1] = (uint8_t)(0x00 | (swing_offset << 2));
 
 	Cs::setOutput(false);
 	SpiMaster::transfer(tx_buffer.data(), nullptr, 2);
@@ -1076,12 +1157,18 @@ template<modm::Dw3110::Register Reg, size_t Len, size_t Offset>
 void
 modm::Dw3110Phy<SpiMaster, Cs>::writeRegister(std::span<const uint8_t, Len> val)
 {
+	constexpr uint8_t final_offset = Reg.offset + Offset;
+	if constexpr (final_offset >= 0x7F)
+	{
+		writeAddressIndirect<Reg.bank, Len>(final_offset, val);
+		return;
+	}
+
 	static_assert(Len + Offset <= Reg.length, "Size of write is too large for this register!");
 	modm::this_fiber::poll([&]{ return this->acquireMaster(); });
 
-	tx_buffer[0] =
-		(uint8_t)(0xC0 | ((Reg.bank.addr << 1) & 0x3E) | (((Reg.offset + Offset) >> 6) & 0x01));
-	tx_buffer[1] = (uint8_t)(0x00 | ((Reg.offset + Offset) << 2));
+	tx_buffer[0] = (uint8_t)(0xC0 | ((Reg.bank.addr << 1) & 0x3E) | (((final_offset) >> 6) & 0x01));
+	tx_buffer[1] = (uint8_t)(0x00 | ((final_offset) << 2));
 
 	Cs::setOutput(false);
 	SpiMaster::transfer(tx_buffer.data(), nullptr, 2);
@@ -1116,15 +1203,16 @@ void
 modm::Dw3110Phy<SpiMaster, Cs>::writeRegisterMasked(std::span<const uint8_t, Len> or_mask,
 													std::span<const uint8_t, Len> and_mask)
 {
+	constexpr uint8_t final_offset = Reg.offset + Offset;
+	static_assert(final_offset < 0x7F, "Masked writed to offsets >= 0x7f are unimplemented!");
 	static_assert(Len + Offset <= Reg.length,
 				  "Size of masked write is too large for this register!");
 	static_assert(Len == 1 || Len == 2 || Len == 4,
 				  "Masked writes only support sizes of 1,2 or 4 Bytes.");
 	modm::this_fiber::poll([&]{ return this->acquireMaster(); });
 
-	tx_buffer[0] =
-		(uint8_t)(0xC0 | ((Reg.bank.addr << 1) & 0x3E) | (((Reg.offset + Offset) >> 6) & 0x01));
-	tx_buffer[1] = (uint8_t)(0x00 | ((Reg.offset + Offset) << 2));
+	tx_buffer[0] = (uint8_t)(0xC0 | ((Reg.bank.addr << 1) & 0x3E) | (((final_offset) >> 6) & 0x01));
+	tx_buffer[1] = (uint8_t)(0x00 | ((final_offset) << 2));
 	if constexpr (Len == 1)
 		tx_buffer[1] |= 1;
 	else if constexpr (Len == 2)
@@ -1294,4 +1382,67 @@ modm::Dw3110Phy<SpiMaster, Cs>::reuseLastSTSIV()
 
 	constexpr static uint8_t sts_ctrl[] = {0x02};
 	return writeRegister<Dw3110::STS_CTRL, 1>(sts_ctrl);
+}
+
+template<typename SpiMaster, typename Cs>
+void
+modm::Dw3110Phy<SpiMaster, Cs>::setDoubleBuffering(bool enabled)
+{
+	double_buffered = enabled;
+	if (enabled)
+	{
+		constexpr static uint8_t or_mask_true[] = {0x00};
+		constexpr static uint8_t and_mask_true[] = {0xF7};
+		writeRegisterMasked<Dw3110::SYS_CFG, 1>(or_mask_true, and_mask_true);
+
+		constexpr static uint8_t diag_enable[] = {0x01};
+		writeRegister<Dw3110::RDB_DIAG, 1>(diag_enable);
+	} else
+	{
+		constexpr static uint8_t or_mask_false[] = {0x08};
+		constexpr static uint8_t and_mask_false[] = {0xFF};
+		writeRegisterMasked<Dw3110::SYS_CFG, 1>(or_mask_false, and_mask_false);
+
+		constexpr static uint8_t diag_disable[] = {0x00};
+		writeRegister<Dw3110::RDB_DIAG, 1>(diag_disable);
+	}
+}
+
+template<typename SpiMaster, typename Cs>
+void
+modm::Dw3110Phy<SpiMaster, Cs>::releaseRXBuffer()
+{
+	sendCommand<Dw3110::FastCommand::CMD_DB_TOGGLE>();
+}
+
+template<typename SpiMaster, typename Cs>
+void
+modm::Dw3110Phy<SpiMaster, Cs>::stopReceive()
+{
+	sendCommand<Dw3110::FastCommand::CMD_TXRXOFF>();
+}
+
+template<typename SpiMaster, typename Cs>
+template<modm::Dw3110::RegisterBank Reg, size_t Len>
+void
+modm::Dw3110Phy<SpiMaster, Cs>::readAddressIndirect(uint16_t offset, std::span<uint8_t, Len> out)
+{
+	constexpr static uint8_t addr_buf[] = {Reg.addr};
+	writeRegister<Dw3110::PTR_ADDR_A, 1>(addr_buf);
+	const uint8_t offset_buf[2] = {((uint8_t *)&offset)[0], ((uint8_t *)&offset)[1]};
+	writeRegister<Dw3110::PTR_OFFSET_A, 2>(offset_buf);
+	readRegisterBank<Dw3110::INDIRECT_PTR_A>(out, Len);
+}
+
+template<typename SpiMaster, typename Cs>
+template<modm::Dw3110::RegisterBank Reg, size_t Len>
+void
+modm::Dw3110Phy<SpiMaster, Cs>::writeAddressIndirect(uint16_t offset,
+													 std::span<const uint8_t, Len> out)
+{
+	constexpr static uint8_t addr_buf[] = {Reg.addr};
+	writeRegister<Dw3110::PTR_ADDR_A, 1>(addr_buf);
+	const uint8_t offset_buf[2] = {((uint8_t *)&offset)[0], ((uint8_t *)&offset)[1]};
+	writeRegister<Dw3110::PTR_OFFSET_A, 2>(offset_buf);
+	writeRegisterBank<Dw3110::INDIRECT_PTR_A>(out, Len);
 }

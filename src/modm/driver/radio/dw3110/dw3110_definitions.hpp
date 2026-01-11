@@ -437,13 +437,46 @@ struct Dw3110
 	static constexpr Register AES_KEY_6{.bank = AES_RAM, .offset = 0x60, .length = 16};
 	static constexpr Register AES_KEY_7{.bank = AES_RAM, .offset = 0x70, .length = 16};
 
-	// TODO DB_DIAG
+	// Subregisters for DB_DIAG, each of these also exists as a set 2 version with offset
+	// DB_DIAG_SET_2_offset
+	static constexpr uint8_t DB_DIAG_SET_2_offset = 0xE8;
+	static constexpr Register DB_RX_FINFO{.bank = DB_DIAG, .offset = 0x0, .length = 4};
+	static constexpr Register DB_RX_TIME{.bank = DB_DIAG, .offset = 0x4, .length = 16};
+	static constexpr Register DB_CIA_DIAG_0{.bank = DB_DIAG, .offset = 0xC, .length = 4};
+	static constexpr Register DB_TDOA{.bank = DB_DIAG, .offset = 0x10, .length = 6};
+	static constexpr Register DB_PDOA{.bank = DB_DIAG, .offset = 0x14, .length = 2};
+	static constexpr Register DB_IP_DIAG_12{.bank = DB_DIAG, .offset = 0x1C, .length = 4};
+	static constexpr Register DB_IP_TS{.bank = DB_DIAG, .offset = 0x20, .length = 8};
+	static constexpr Register DB_STS_TS{.bank = DB_DIAG, .offset = 0x28, .length = 8};
+	static constexpr Register DB_STS1_TS{.bank = DB_DIAG, .offset = 0x30, .length = 8};
+	static constexpr Register DB_CIA_DIAG_1{.bank = DB_DIAG, .offset = 0x38, .length = 4};
+	static constexpr Register DB_IP_DIAG_0{.bank = DB_DIAG, .offset = 0x3C, .length = 4};
+	static constexpr Register DB_IP_DIAG_1{.bank = DB_DIAG, .offset = 0x40, .length = 4};
+	static constexpr Register DB_IP_DIAG_2{.bank = DB_DIAG, .offset = 0x44, .length = 4};
+	static constexpr Register DB_IP_DIAG_3{.bank = DB_DIAG, .offset = 0x48, .length = 4};
+	static constexpr Register DB_IP_DIAG_4{.bank = DB_DIAG, .offset = 0x4C, .length = 4};
+	static constexpr Register DB_IP_DIAG_8{.bank = DB_DIAG, .offset = 0x5C, .length = 4};
+	static constexpr Register DB_STS_DIAG_0{.bank = DB_DIAG, .offset = 0x6C, .length = 4};
+	static constexpr Register DB_STS_DIAG_1{.bank = DB_DIAG, .offset = 0x70, .length = 4};
+	static constexpr Register DB_STS_DIAG_2{.bank = DB_DIAG, .offset = 0x74, .length = 4};
+	static constexpr Register DB_STS_DIAG_3{.bank = DB_DIAG, .offset = 0x78, .length = 4};
+	static constexpr Register DB_STS_DIAG_4{.bank = DB_DIAG, .offset = 0x7C, .length = 4};
+	static constexpr Register DB_STS_DIAG_8{.bank = DB_DIAG, .offset = 0x8C, .length = 4};
+	static constexpr Register DB_STS_DIAG_12{.bank = DB_DIAG, .offset = 0x9C, .length = 4};
+	static constexpr Register DB_STS1_DIAG_0{.bank = DB_DIAG, .offset = 0xB4, .length = 4};
+	static constexpr Register DB_STS1_DIAG_1{.bank = DB_DIAG, .offset = 0xB8, .length = 4};
+	static constexpr Register DB_STS1_DIAG_2{.bank = DB_DIAG, .offset = 0xBC, .length = 4};
+	static constexpr Register DB_STS1_DIAG_3{.bank = DB_DIAG, .offset = 0xC0, .length = 4};
+	static constexpr Register DB_STS1_DIAG_4{.bank = DB_DIAG, .offset = 0xC4, .length = 4};
+	static constexpr Register DB_STS1_DIAG_8{.bank = DB_DIAG, .offset = 0xD4, .length = 4};
+	static constexpr Register DB_STS1_DIAG_12{.bank = DB_DIAG, .offset = 0xE4, .length = 4};
 
-	// TODO INDIRECT_PTR_A
-
-	// TODO INDIRECT_PTR_B
-
-	// TODO IN_PTR_CFG
+	// Subregisters for IN_PTR_CFG
+	static constexpr Register FINT_STAT{.bank = IN_PTR_CFG, .offset = 0x0, .length = 1};
+	static constexpr Register PTR_ADDR_A{.bank = IN_PTR_CFG, .offset = 0x4, .length = 1};
+	static constexpr Register PTR_OFFSET_A{.bank = IN_PTR_CFG, .offset = 0x8, .length = 2};
+	static constexpr Register PTR_ADDR_B{.bank = IN_PTR_CFG, .offset = 0xC, .length = 1};
+	static constexpr Register PTR_OFFSET_B{.bank = IN_PTR_CFG, .offset = 0x10, .length = 2};
 
 	static constexpr uint32_t SEQ_CTRL_AINIT2IDLE_mask = 0x00000010;
 };

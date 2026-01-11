@@ -28,7 +28,7 @@ namespace modm
 
 /**
  * Hardware abstraction layer for DW3110 \n
- * Unsupported Features: AES encryption, Double buffering, GPIO, Temperature and
+ * Unsupported Features: AES encryption, GPIO, Temperature and
  * Voltage, Pulse Generator calibration, RX antenna delay temp compensation,
  * Soft reset, Sleep, Sniff mode
  * @ingroup  modm_driver_dw3110
@@ -69,6 +69,13 @@ public:
 		PayloadTooLarge
 	};
 
+	enum class RXBuffer : uint8_t
+	{
+		RX_BUFFER_0 = (1 << 0),
+		RX_BUFFER_1 = (1 << 1)
+	};
+	MODM_FLAGS8(RXBuffer);
+
 	Dw3110Phy();
 
 	/// Set the UWB channel used
@@ -92,6 +99,7 @@ public:
 	setReceiveWaitTimeout(modm::chrono::micro_clock::duration duration);
 
 	/// Set whether to stay in receive mode after receive failure
+	/// @warning Cannot be used when Double buffer mode is enabled
 	void
 	setReenableOnRxFailure(bool value);
 
@@ -122,8 +130,10 @@ public:
 	/// Get the timestamp of the last arrived packet. \n
 	/// This timestamp already has various correction factors applied to it. \n
 	/// It is given in ~15.65 picoseconds per unit
+	/// @param rx_buffer The rx_buffer to get the information from
+	/// @note rx_buffer is only respected if double buffer mode is enabled
 	uint64_t
-	getReceiveTimestamp();
+	getReceiveTimestamp(RXBuffer rx_buffer = RXBuffer::RX_BUFFER_0);
 
 	/// Analogous to getReceiveTimestamp
 	uint64_t
@@ -238,9 +248,15 @@ public:
 	bool
 	startReceive();
 
+	/// Stop the current reception and move to idle mode
+	void
+	stopReceive();
+
 	/// Check if a packet has been successfully received
+	/// @param rx_buffer if not nullptr and double buffer is enabled will contain flags set for each
+	/// buffer containing a packet
 	bool
-	packetReady();
+	packetReady(RXBuffer_t *rx_buffer = nullptr);
 
 	/// Check if the chip is currently in RX mode
 	bool
@@ -250,8 +266,16 @@ public:
 	/// received flags
 	/// @param payload Region of memory the payload will be written to
 	/// @param payload_len Contains the length of the received payload
+	/// @param rx_buffer The RX Buffer to receive from
+	/// @note rx_buffer is only respected if double buffer mode is enabled
 	bool
-	fetchPacket(std::span<uint8_t> payload, size_t &payload_len);
+	fetchPacket(std::span<uint8_t> payload, size_t &payload_len,
+				RXBuffer rx_buffer = RXBuffer::RX_BUFFER_0);
+
+	/// Notify chip the RX Buffer is free to use again
+	/// @note Only use this in Double buffer operation
+	void
+	releaseRXBuffer();
 
 	/// Transmit a given package using the current configuration using a given transmission mode
 	/// @param payload Span to the desired payload
@@ -355,6 +379,11 @@ public:
 	void
 	reuseLastSTSIV();
 
+	/// Enable/disable double buffering mode
+	/// @param enabled If true enable double buffering, if false disable
+	void
+	setDoubleBuffering(bool enabled);
+
 protected:
 	/// Transmit a given package using the current configuration and a specific command
 	/// @param payload Span to the desired payload
@@ -401,16 +430,32 @@ protected:
 	void
 	readOTPMemory(std::span<uint8_t, 4> out);
 
+	/// Read an offset inside a registerbank using the indirect access
+	template<Dw3110::RegisterBank Reg, size_t Len>
+	void
+	readAddressIndirect(uint16_t offset, std::span<uint8_t, Len> out);
+
 	/// Read a variable from a register
 	template<Dw3110::Register Reg, size_t Len, size_t Offset = 0>
 	void
 	readRegister(std::span<uint8_t, Len> out);
+
+	/// Read a variable from a register in DB_DIAG
+	/// @param rx_buffer the rx_buffer register set to read from
+	template<Dw3110::Register Reg, size_t Len, size_t Offset = 0>
+	void
+	readSwingRegister(RXBuffer rx_buffer, std::span<uint8_t, Len> out);
 
 	/// Read a number of bytes from a register bank, useful for RX buffers and
 	/// other large read transfers
 	template<Dw3110::RegisterBank Reg>
 	void
 	readRegisterBank(std::span<uint8_t> out, size_t len);
+
+	/// Read an offset inside a registerbank using the indirect access
+	template<Dw3110::RegisterBank Reg, size_t Len>
+	void
+	writeAddressIndirect(uint16_t offset, std::span<const uint8_t, Len> out);
 
 	/// Write a variable to a register
 	template<Dw3110::Register Reg, size_t Len, size_t Offset = 0>
@@ -449,7 +494,7 @@ private:
 
 	Dw3110::SystemStatus_t system_status{0};
 	uint16_t preamble_len{0}, sfd_len{0}, pac_len{0}, sfd_toc_val{0}, fcs_len{2};
-	bool long_frames{false};
+	bool long_frames{false}, double_buffered{false};
 	Dw3110::SystemState chip_state{Dw3110::SystemState::OFF};
 	std::array<uint8_t, 16> scratch{};
 	std::array<uint8_t, 6> sys_status{}, tx_info{};
