@@ -1,0 +1,14 @@
+<library>
+  <extends>modm:nucleo-f411re</extends>
+  <options>
+    <option name="modm:build:build.path">../../../build/nucleo_f411re/dw3110</option>
+  </options>
+  <modules>
+    <module>modm:build:scons</module>
+    <module>modm:driver:dw3110</module>
+    <module>modm:platform:spi:1</module>
+    <module>modm:processing:fiber</module>
+    <module>modm:platform:exti</module>
+    <module>modm:ui:button</module>
+  </modules>
+</library>
