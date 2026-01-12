@@ -1,0 +1,13 @@
+<library>
+  <extends>modm:nucleo-g474re</extends>
+  <options>
+    <option name="modm:build:build.path">../../../build/nucleo_g474re/paa5100je</option>
+  </options>
+  <modules>
+    <module>modm:driver:paa5100je</module>
+    <module>modm:platform:spi:1</module>
+    <module>modm:build:scons</module>
+    <module>modm:processing:fiber</module>
+    <module>modm:debug</module>
+  </modules>
+</library>
